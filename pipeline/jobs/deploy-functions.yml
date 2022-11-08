@@ -1,0 +1,24 @@
+parameters:
+  - name: serviceConnection
+    type: string
+
+jobs:
+  - job: release_function
+    displayName: Release function app
+    dependsOn: infra_deployment
+    variables:
+      functionsAppName: $[ dependencies.infra_deployment.outputs['setFunctionName.ArmOutputFunctionAppName'] ]
+    steps:
+      - task: DownloadPipelineArtifact@2
+        displayName: Download pipeline artifact
+        inputs:
+          articfact: functions
+          path: $(Pipeline.Workspace)
+
+      - task: AzureFunctionApp@1
+        displayName: Release function app
+        inputs:
+          azureSubscription: ${{ parameters.serviceConnection }}
+          appType: functionAppLinux
+          appName: $(functionsAppName)
+          package: $(Pipeline.Workspace)/functions/$(Build.BuildId).zip

@@ -1,0 +1,89 @@
+trigger:
+  - master
+
+variables:
+  - template: variables.yml
+
+name: $(pipelineName)
+
+stages:
+  - stage: versionize
+    displayName: Determine version number
+    jobs:
+      - job: determine_version
+        displayName: Determine version
+        steps:
+          - template: steps/gitversion.yml
+  - stage: compile_functions
+    displayName: Compiler tasks
+    dependsOn: versionize
+    variables:
+      versionNumber: $[ stageDependencies.versionize.determine_version.outputs['versioning.versionNumberOutput'] ]
+    jobs:
+      - job: compile_functions
+        displayName: Compile functions
+        steps:
+          - checkout: self
+            fetchDepth: 1
+          - task: UseDotNet@2
+            displayName: "Install .NET Core sdk 6.0"
+            inputs:
+              packageType: "sdk"
+              version: "6.0.x"
+          - bash: dotnet restore $(solutionPath)
+            displayName: Restore packages
+          - bash: dotnet publish $(projectPath) --no-restore -c $(buildConfiguration) -o functionsout /p:Version=$(versionNumber)
+            displayName: Compile functions project
+          #              arguments: -c $(buildConfiguration) --no-restore /p:Version=$(assemblyVersion) --verbosity $(verbosity) -o functionsout
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: "$(Build.SourcesDirectory)/functionsout"
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/functions/$(Build.BuildId).zip"
+          - publish: $(Build.ArtifactStagingDirectory)/functions
+            displayName: "Publish artifact: functions"
+            artifact: functions
+      - job: compile_infrastructure
+        displayName: Transpile Bicep
+        steps:
+          - checkout: self
+            fetchDepth: 1
+          - bash: az bicep build --file infrastructure/main.bicep
+            displayName: Transpile Bicep
+          - task: CopyFiles@2
+            displayName: Move ARM Template to artifact staging
+            inputs:
+              sourceFolder: infrastructure
+              contents: "*.json"
+              targetFolder: $(Build.ArtifactStagingDirectory)/infrastructure
+
+          - publish: $(Build.ArtifactStagingDirectory)/infrastructure
+            displayName: "Publish artifact: infrastructure"
+            artifact: infrastructure
+
+  - stage: deploy_test
+    displayName: "Deploy to Test"
+    dependsOn: compile_functions
+    jobs:
+      - template: jobs/deploy-infra.yml
+        parameters:
+          serviceConnection: FunctionsDeploymentTest
+          parametersFile: main.tst.json
+
+      - template: jobs/deploy-functions.yml
+        parameters:
+          serviceConnection: FunctionsDeploymentTest
+
+  - stage: deploy_prod
+    displayName: "Deploy to Test"
+    dependsOn: deploy_test
+    jobs:
+      - template: jobs/deploy-infra.yml
+        parameters:
+          serviceConnection: FunctionsDeploymentProd
+          parametersFile: main.prd.json
+
+      - template: jobs/deploy-functions.yml
+        parameters:
+          serviceConnection: FunctionsDeploymentProd

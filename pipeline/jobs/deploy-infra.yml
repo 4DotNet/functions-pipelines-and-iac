@@ -1,0 +1,30 @@
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: parametersFile
+    type: string
+    default: "main.prd.json"
+
+jobs:
+  - job: infra_deployment
+    displayName: "Infrastructure Deployment"
+    steps:
+      - download: current
+        artifact: infrastructure
+      - task: AzureResourceManagerTemplateDeployment@3
+        inputs:
+          deploymentScope: "Subscription"
+          azureResourceManagerConnection: ${{ parameters.serviceConnection }}
+          location: $(azureLocation)
+          csmFile: $(Pipeline.Workspace)/infrastructure/main.json
+          csmParametersFile: $(Pipeline.Workspace)/infrastructure/${{ parameters.parametersFile }}
+          deploymentMode: "Incremental" # 'Incremental' | 'Complete' | 'Validation'. Required. Deployment mode. Default: Incremental.
+          deploymentOutputs: "armOutputs"
+
+      - bash: |
+          echo "##vso[task.setvariable variable=ArmOutputFunctionAppName;isOutput=true]$(echo $ARM_OUTPUTS | jq -r '.functionsAppName.value')"
+        displayName: "Parse ARM deploymentOutputs | bash"
+        name: setFunctionName
+        continueOnError: true
+        env:
+          ARM_OUTPUTS: $(armOutputs)

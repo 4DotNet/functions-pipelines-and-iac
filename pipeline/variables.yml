@@ -1,0 +1,26 @@
+parameters:
+  majorMinor: 0.1
+  verbosity: quiet
+  deployment: "dev"
+
+variables:
+  - name: DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+    value: true
+  - name: verbosity
+    value: ${{ parameters.verbosity }}
+  - name: majorMinor
+    value: ${{ parameters.majorMinor }}
+  - name: deploymentStage
+    value: ${{ parameters.deployment }}
+  - name: azureLocation
+    value: northeurope
+  - name: azureLocationAbbreviation
+    value: neu
+  - name: solutionPath
+    value: "src/event-driven-az-functions.sln"
+  - name: projectPath
+    value: "src/EventDriver.AzureFunctions/EventDriver.AzureFunctions.csproj"
+  - name: buildConfiguration
+    value: Release
+  - name: date
+    value: $[format('{0:yyyyMMdd}', pipeline.startTime)]
